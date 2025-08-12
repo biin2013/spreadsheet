@@ -124,7 +124,7 @@ class Export
     private function resolveHeaderMerge(array &$header): void
     {
         foreach ($header as &$value) {
-            if ($value['children']) {
+            if ($value['children'] ?? null) {
                 $this->resolveHeaderMerge($value['children']);
                 $value[self::MERGE_COL_KEY] = array_sum(array_column($value['children'], self::MERGE_COL_KEY));
                 $value[self::MERGE_ROW_KEY] = 1;
@@ -146,7 +146,7 @@ class Export
     private function resolveDataMerge(array &$data): void
     {
         foreach ($data as &$value) {
-            if ($value[self::DATA_CHILDREN_KEY]) {
+            if ($value[self::DATA_CHILDREN_KEY] ?? null) {
                 $this->resolveDataMerge($value[self::DATA_CHILDREN_KEY]);
                 $value[self::MERGE_ROW_KEY] = array_sum(array_column($value[self::DATA_CHILDREN_KEY], self::MERGE_ROW_KEY));
             } else {
