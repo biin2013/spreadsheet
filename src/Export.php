@@ -21,7 +21,7 @@ class Export
     private array $merges = [];
     private array $currentConfig = [];
     private array $defaultConfig = [
-        'sheet_name' => 'Sheet',
+        'sheet_name' => null,
         'data_children_key' => 'children',
         'data_children_text_key' => 'name',
         'data_children_cell_merge' => true,
@@ -38,6 +38,7 @@ class Export
     private array $flattenHeader = [];
     private array $flattenHeaderData = [];
     private array $flattenData = [];
+    private array $fileInfo = [];
 
     public function __construct(array $data = [], Spreadsheet $spreadsheet = null)
     {
@@ -87,11 +88,14 @@ class Export
         return new static($data);
     }
 
-    public function build(array $data = null): static
+    public function build(
+        string              $rootPath = '.',
+        bool|Closure|string $datePath = true,
+        string|Closure|null $fileName = null
+    ): static
     {
-        if ($data) {
-            $this->data = $data;
-        }
+        $this->fileInfo = $this->resolveFileName($rootPath, $datePath, $fileName);
+
         foreach ($this->data as $index => $val) {
             $this->currentSheetIndex = $index;
             $this->currentConfig = array_merge($this->defaultConfig, $val['config'] ?? []);
@@ -244,9 +248,11 @@ class Export
         $headerData = $this->flattenHeaderData[$sheetIndex];
         $data = $this->flattenData[$sheetIndex];
 
-        $this->spreadsheet
-            ->createSheet($sheetIndex)
-            ->setTitle($this->currentConfig['sheet_name']);
+        if ($sheetIndex > 0) {
+            $this->spreadsheet->createSheet($sheetIndex);
+            $this->spreadsheet->setActiveSheetIndex($sheetIndex);
+        }
+        $this->spreadsheet->getActiveSheet()->setTitle($this->currentConfig['sheet_name'] ?? 'Sheet' . ($sheetIndex + 1));
 
         $this->buildSheetHeader($headerData);
         $this->buildSheetData($header, $data, $headerRow);
@@ -309,12 +315,34 @@ class Export
         }
     }
 
-    public function export(string $rootPath = '.', bool|Closure|string $datePath = true, string|Closure|null $fileName = null): array
+    public function export(): static
     {
-        $file = $this->resolveFileName($rootPath, $datePath, $fileName);
-        $this->writer()->save($file['full']);
+        if (!is_dir($this->fileInfo['path'])) {
+            mkdir($this->fileInfo['path'], 0777, true);
+        }
 
-        return $file;
+        $this->writer()->save($this->fileInfo['full']);
+
+        return $this;
+    }
+
+    public function fileInfo(): array
+    {
+        return $this->fileInfo;
+    }
+
+    public function download(): void
+    {
+        if ($this->fileType == 'csv') {
+            header('Content-Type: text/csv; charset=utf-8');
+        } else {
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        }
+        header('Content-Disposition: attachment;filename="' . $this->fileInfo['file'] . '"');
+        header('Cache-Control: max-age=0');
+
+        $this->writer()->save('php://output');
+        exit;
     }
 
     /**
@@ -330,10 +358,6 @@ class Export
             : (is_callable($datePath) ? $datePath() : date($datePath));
         $fullPath = rtrim($rootPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . rtrim($date, DIRECTORY_SEPARATOR);
 
-        if (!is_dir($fullPath)) {
-            mkdir($fullPath, 0777, true);
-        }
-
         $fileName = is_string($fileName)
             ? $fileName
             : (is_callable($fileName) ? $fileName() : str_replace('.', '', microtime(true)));
@@ -344,8 +368,10 @@ class Export
         return [
             'root' => $rootPath,
             'date' => $date,
-            'file' => $fileName,
+            'name' => $fileName,
             'type' => $type,
+            'path' => $fullPath,
+            'file' => $fileName . '.' . $type,
             'full' => $full
         ];
     }
