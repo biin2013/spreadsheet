@@ -302,8 +302,8 @@ class Export
             foreach ($header as $val) {
                 $format = $val['config']['format'] ?? null;
                 $text = is_callable($format)
-                    ? $format($row[$val['field']], $row, $worksheet)
-                    : $row[$val['field']];
+                    ? $format($row[$val['field']] ?? null, $row, $worksheet)
+                    : $row[$val['field']] ?? '';
                 $worksheet->setCellValue([$col, $startRow], $text);
 
                 $custom = $val['config']['custom'] ?? null;
